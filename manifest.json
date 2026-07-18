@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Local Grammar Corrector",
+  "description": "Private, local-first grammar correction using on-device Transformers.js with WebGPU.",
+  "version": "1.0.0",
+  "permissions": ["storage"],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  }
+}

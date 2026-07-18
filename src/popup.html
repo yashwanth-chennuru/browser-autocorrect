@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Local Grammar Corrector</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 12px;
+        width: 360px;
+      }
+
+      h1 {
+        margin: 0 0 10px;
+        font-size: 16px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 13px;
+      }
+
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+        min-height: 110px;
+        resize: vertical;
+        padding: 8px;
+        margin-bottom: 10px;
+      }
+
+      button {
+        width: 100%;
+        padding: 8px 10px;
+        cursor: pointer;
+        margin-bottom: 10px;
+      }
+
+      #status {
+        min-height: 18px;
+        font-size: 12px;
+        color: #444;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Grammar Correction</h1>
+    <label for="input-text">Input text</label>
+    <textarea id="input-text" placeholder="Type or paste text here..."></textarea>
+    <button id="fix-btn">Fix Grammar</button>
+    <label for="output-text">Corrected text</label>
+    <textarea id="output-text" readonly placeholder="Corrected output appears here..."></textarea>
+    <div id="status"></div>
+    <script src="./popup.js"></script>
+  </body>
+</html>
