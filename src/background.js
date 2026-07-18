@@ -12,7 +12,7 @@ class GrammarPipelineSingleton {
         "Xenova/grammar-synthesis-small",
         {
           device: "webgpu",
-          dtype: "q4"
+          dtype: "q8"
         }
       );
     }
@@ -29,11 +29,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
 
       const grammar = await GrammarPipelineSingleton.getInstance();
-      const output = await grammar(`grammar: [${message.text}]`);
-      const corrected =
+      const output = await grammar(`grammar: ${message.text}`, {
+        do_sample: false
+      });
+      const generatedText =
         Array.isArray(output) && output[0] && typeof output[0].generated_text === "string"
           ? output[0].generated_text
           : "";
+      const corrected = generatedText.replace(/^grammar:\s*/i, "").trim();
 
       sendResponse({ ok: true, text: corrected });
     } catch (error) {
