@@ -4,6 +4,9 @@
   "description": "Private, local-first grammar correction using on-device Transformers.js with WebGPU.",
   "version": "1.0.0",
   "permissions": ["storage"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+  },
   "action": {
     "default_popup": "popup.html"
   },
