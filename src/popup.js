@@ -12,7 +12,7 @@ fixButton.addEventListener("click", async () => {
     return;
   }
 
-  status.textContent = "Processing on local GPU...";
+  status.textContent = "Processing locally...";
   fixButton.disabled = true;
 
   try {
@@ -26,7 +26,7 @@ fixButton.addEventListener("click", async () => {
     }
 
     outputText.value = response.text;
-    status.textContent = "";
+    status.textContent = response.backend === "wasm" ? "Done (local CPU/WASM fallback)." : "";
   } catch (error) {
     status.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
   } finally {
