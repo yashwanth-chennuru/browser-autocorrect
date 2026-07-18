@@ -26,7 +26,13 @@ fixButton.addEventListener("click", async () => {
     }
 
     outputText.value = response.text;
-    status.textContent = response.backend === "wasm" ? "Done (local CPU/WASM fallback)." : "";
+    if (response.notice) {
+      status.textContent = response.notice;
+    } else if (response.backend === "wasm") {
+      status.textContent = "Done (local CPU/WASM fallback).";
+    } else {
+      status.textContent = "";
+    }
   } catch (error) {
     status.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
   } finally {
