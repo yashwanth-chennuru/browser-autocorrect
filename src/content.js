@@ -1,34 +1,34 @@
-const DEBOUNCE_MS = 800;
-const stateMap = new WeakMap();
-const mirrorOwners = new Map();
+const DEBOUNCE_DELAY = 800;
+const stateByElement = new WeakMap();
+const mirrorOwners = new WeakMap();
 const trackedElements = new Set();
-let activeElement = null;
-let activeTooltipPayload = null;
+let activeEditable = null;
+let activeSuggestion = null;
 
-const tooltip = document.createElement("div");
-tooltip.className = "grammar-ai-tooltip";
-document.documentElement.appendChild(tooltip);
+const tooltip = document.createElement('div');
+tooltip.id = 'local-grammar-tooltip';
+document.body.appendChild(tooltip);
 
-function isEditableTarget(node) {
-  if (!(node instanceof HTMLElement)) {
+function isEditableElement(element) {
+  if (!(element instanceof HTMLElement)) {
     return false;
   }
-  return node.tagName === "TEXTAREA" || node.getAttribute("contenteditable") === "true";
+  return element.matches('textarea, [contenteditable="true"]');
 }
 
-function getEditableTarget(node) {
+function findEditableTarget(node) {
   if (!(node instanceof Element)) {
     return null;
   }
   return node.closest('textarea, [contenteditable="true"]');
 }
 
-function getElementText(element) {
-  return element.tagName === "TEXTAREA" ? element.value : element.innerText;
+function getTextFromElement(element) {
+  return element.tagName === 'TEXTAREA' ? element.value : element.innerText;
 }
 
-function setElementText(element, text) {
-  if (element.tagName === "TEXTAREA") {
+function setTextToElement(element, text) {
+  if (element.tagName === 'TEXTAREA') {
     element.value = text;
   } else {
     element.innerText = text;
@@ -37,11 +37,11 @@ function setElementText(element, text) {
 
 function escapeHtml(text) {
   return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 function splitWords(text) {
@@ -52,20 +52,26 @@ function buildWordRanges(text) {
   const ranges = [];
   const regex = /\S+/g;
   let match = regex.exec(text);
+
   while (match) {
-    ranges.push({ start: match.index, end: match.index + match[0].length, word: match[0] });
+    ranges.push({
+      start: match.index,
+      end: match.index + match[0].length,
+      word: match[0]
+    });
     match = regex.exec(text);
   }
+
   return ranges;
 }
 
-function getMismatches(originalText, correctedText) {
+function computeWordDiffs(originalText, correctedText) {
   const originalWords = splitWords(originalText);
   const correctedWords = splitWords(correctedText);
-  const length = Math.min(originalWords.length, correctedWords.length);
+  const compareLength = Math.min(originalWords.length, correctedWords.length);
   const mismatches = [];
 
-  for (let index = 0; index < length; index += 1) {
+  for (let index = 0; index < compareLength; index += 1) {
     if (originalWords[index] !== correctedWords[index]) {
       mismatches.push({
         original: originalWords[index],
@@ -79,71 +85,76 @@ function getMismatches(originalText, correctedText) {
 }
 
 function ensureState(element) {
-  let state = stateMap.get(element);
+  let state = stateByElement.get(element);
   if (state) {
     return state;
   }
 
-  const mirror = document.createElement("div");
-  mirror.className = "grammar-ai-mirror";
-  mirror.style.display = "none";
+  const mirror = document.createElement('div');
+  mirror.className = 'local-grammar-mirror';
+  mirror.style.display = 'none';
 
-  const content = document.createElement("div");
-  content.className = "grammar-ai-mirror-content";
-  mirror.appendChild(content);
+  const mirrorContent = document.createElement('div');
+  mirrorContent.className = 'local-grammar-mirror-content';
+  mirror.appendChild(mirrorContent);
 
-  document.documentElement.appendChild(mirror);
+  document.body.appendChild(mirror);
 
   state = {
-    debounceId: null,
-    mirror,
-    content,
-    text: "",
+    debounceTimer: null,
+    text: '',
     wordRanges: [],
-    mismatches: []
+    mismatches: [],
+    mirror,
+    mirrorContent
   };
-  stateMap.set(element, state);
+
+  stateByElement.set(element, state);
   mirrorOwners.set(mirror, element);
   trackedElements.add(element);
   return state;
 }
 
 function hideTooltip() {
-  tooltip.style.display = "none";
-  activeTooltipPayload = null;
+  tooltip.style.display = 'none';
+  activeSuggestion = null;
 }
 
-function removeHighlights(element) {
-  const state = stateMap.get(element);
+function clearHighlights(element) {
+  const state = stateByElement.get(element);
   if (!state) {
     return;
   }
 
-  state.mismatches = [];
+  state.text = '';
   state.wordRanges = [];
-  state.content.textContent = "";
-  state.mirror.style.display = "none";
-  element.classList.remove("grammar-ai-target");
+  state.mismatches = [];
+  state.mirrorContent.textContent = '';
+  state.mirror.style.display = 'none';
+  element.classList.remove('local-grammar-target');
   hideTooltip();
 }
 
-function syncMirrorPosition(element) {
-  const state = stateMap.get(element);
-  if (!state || state.mirror.style.display === "none") {
+function syncMirrorLayout(element) {
+  const state = stateByElement.get(element);
+  if (!state || state.mirror.style.display === 'none') {
     return;
   }
 
   const rect = element.getBoundingClientRect();
   const style = window.getComputedStyle(element);
 
-  state.mirror.style.left = `${rect.left}px`;
-  state.mirror.style.top = `${rect.top}px`;
+  state.mirror.style.left = `${rect.left + window.scrollX}px`;
+  state.mirror.style.top = `${rect.top + window.scrollY}px`;
   state.mirror.style.width = `${rect.width}px`;
   state.mirror.style.height = `${rect.height}px`;
-  state.mirror.style.font = style.font;
-  state.mirror.style.letterSpacing = style.letterSpacing;
-  state.mirror.style.lineHeight = style.lineHeight;
   state.mirror.style.padding = style.padding;
+  state.mirror.style.fontFamily = style.fontFamily;
+  state.mirror.style.fontSize = style.fontSize;
+  state.mirror.style.fontWeight = style.fontWeight;
+  state.mirror.style.fontStyle = style.fontStyle;
+  state.mirror.style.lineHeight = style.lineHeight;
+  state.mirror.style.letterSpacing = style.letterSpacing;
   state.mirror.style.borderRadius = style.borderRadius;
   state.mirror.style.textAlign = style.textAlign;
   state.mirror.style.direction = style.direction;
@@ -151,30 +162,32 @@ function syncMirrorPosition(element) {
   state.mirror.scrollLeft = element.scrollLeft;
 }
 
-function renderHighlights(element) {
-  const state = stateMap.get(element);
+function renderMirror(element) {
+  const state = stateByElement.get(element);
   if (!state || state.mismatches.length === 0) {
-    removeHighlights(element);
+    clearHighlights(element);
     return;
   }
 
-  const mismatchByWordIndex = new Map(state.mismatches.map((mismatch) => [mismatch.index, mismatch]));
-  let html = "";
+  const mismatchByIndex = new Map(state.mismatches.map((item) => [item.index, item]));
+  let html = '';
   let cursor = 0;
 
   state.wordRanges.forEach((range, wordIndex) => {
     if (cursor < range.start) {
       html += escapeHtml(state.text.slice(cursor, range.start));
     }
-    const mismatch = mismatchByWordIndex.get(wordIndex);
-    const wordText = state.text.slice(range.start, range.end);
+
+    const currentWord = state.text.slice(range.start, range.end);
+    const mismatch = mismatchByIndex.get(wordIndex);
     if (mismatch) {
-      html += `<span class="grammar-error" data-word-index="${wordIndex}" data-suggestion="${escapeHtml(
+      html += `<span class="local-grammar-error" data-word-index="${wordIndex}" data-suggestion="${escapeHtml(
         mismatch.suggestion
-      )}">${escapeHtml(wordText)}</span>`;
+      )}">${escapeHtml(currentWord)}</span>`;
     } else {
-      html += escapeHtml(wordText);
+      html += escapeHtml(currentWord);
     }
+
     cursor = range.end;
   });
 
@@ -182,152 +195,145 @@ function renderHighlights(element) {
     html += escapeHtml(state.text.slice(cursor));
   }
 
-  state.content.innerHTML = html;
-  state.mirror.style.display = "block";
-  element.classList.add("grammar-ai-target");
-  syncMirrorPosition(element);
+  state.mirrorContent.innerHTML = html;
+  state.mirror.style.display = 'block';
+  element.classList.add('local-grammar-target');
+  syncMirrorLayout(element);
 }
 
-async function requestCorrection(element) {
+async function runCorrection(element) {
   const state = ensureState(element);
-  const text = getElementText(element);
-  state.text = text;
-  state.wordRanges = buildWordRanges(text);
+  const currentText = getTextFromElement(element);
+  state.text = currentText;
+  state.wordRanges = buildWordRanges(currentText);
 
-  if (!text.trim()) {
-    removeHighlights(element);
+  if (!currentText.trim()) {
+    clearHighlights(element);
     return;
   }
 
   try {
     const response = await chrome.runtime.sendMessage({
-      action: "correct",
-      type: "FIX_GRAMMAR",
-      text
+      action: 'correct',
+      text: currentText
     });
-    const correctedText = response?.text;
-    const ok = response?.ok === true || response?.success === true;
 
-    if (!ok || typeof correctedText !== "string") {
-      removeHighlights(element);
+    if (!response || response.success !== true || typeof response.text !== 'string') {
+      clearHighlights(element);
       return;
     }
 
-    state.mismatches = getMismatches(text, correctedText);
-    renderHighlights(element);
+    state.mismatches = computeWordDiffs(currentText, response.text);
+    renderMirror(element);
   } catch {
-    removeHighlights(element);
+    clearHighlights(element);
   }
 }
 
-function debounceCorrection(element) {
+function scheduleCorrection(element) {
   const state = ensureState(element);
-  if (state.debounceId) {
-    window.clearTimeout(state.debounceId);
+  if (state.debounceTimer) {
+    window.clearTimeout(state.debounceTimer);
   }
-  state.debounceId = window.setTimeout(() => {
-    requestCorrection(element);
-  }, DEBOUNCE_MS);
+
+  state.debounceTimer = window.setTimeout(() => {
+    runCorrection(element);
+  }, DEBOUNCE_DELAY);
 }
 
-function replaceWordAtIndex(element, wordIndex, suggestion) {
-  const state = stateMap.get(element);
+function replaceWord(element, wordIndex, suggestion) {
+  const state = stateByElement.get(element);
   if (!state || !Number.isInteger(wordIndex) || !suggestion) {
     return;
   }
+
   const range = state.wordRanges[wordIndex];
   if (!range) {
     return;
   }
 
-  const originalText = getElementText(element);
-  const nextText = `${originalText.slice(0, range.start)}${suggestion}${originalText.slice(range.end)}`;
-  setElementText(element, nextText);
-  element.dispatchEvent(new Event("input", { bubbles: true }));
-  hideTooltip();
+  const text = getTextFromElement(element);
+  const updatedText = `${text.slice(0, range.start)}${suggestion}${text.slice(range.end)}`;
+  setTextToElement(element, updatedText);
+  element.dispatchEvent(new Event('input', { bubbles: true }));
+  element.dispatchEvent(new Event('change', { bubbles: true }));
+  clearHighlights(element);
 }
 
-document.addEventListener("focusin", (event) => {
-  const target = getEditableTarget(event.target);
-  if (!target || !isEditableTarget(target)) {
-    activeElement = null;
+document.addEventListener('focusin', (event) => {
+  const target = findEditableTarget(event.target);
+  if (!target || !isEditableElement(target)) {
+    activeEditable = null;
     hideTooltip();
     return;
   }
-  activeElement = target;
+
+  activeEditable = target;
   ensureState(target);
-  syncMirrorPosition(target);
+  syncMirrorLayout(target);
 });
 
-document.addEventListener("input", (event) => {
-  const target = getEditableTarget(event.target);
-  if (!target || !isEditableTarget(target)) {
+document.addEventListener('input', (event) => {
+  const target = findEditableTarget(event.target);
+  if (!target || !isEditableElement(target)) {
     return;
   }
-  activeElement = target;
-  debounceCorrection(target);
+
+  activeEditable = target;
+  scheduleCorrection(target);
 });
 
 document.addEventListener(
-  "scroll",
+  'scroll',
   () => {
-    trackedElements.forEach((element) => syncMirrorPosition(element));
+    trackedElements.forEach((element) => syncMirrorLayout(element));
     hideTooltip();
   },
   true
 );
 
-window.addEventListener("resize", () => {
-  trackedElements.forEach((element) => syncMirrorPosition(element));
+window.addEventListener('resize', () => {
+  trackedElements.forEach((element) => syncMirrorLayout(element));
   hideTooltip();
 });
 
-document.addEventListener("mousemove", (event) => {
-  const hoveredError = event.target instanceof Element ? event.target.closest(".grammar-error") : null;
+document.addEventListener('mousemove', (event) => {
+  const hoveredError = event.target instanceof Element ? event.target.closest('.local-grammar-error') : null;
   if (!hoveredError || !(hoveredError instanceof HTMLElement)) {
     hideTooltip();
     return;
   }
 
-  const mirror = hoveredError.closest(".grammar-ai-mirror");
-  if (!mirror) {
+  const mirror = hoveredError.closest('.local-grammar-mirror');
+  if (!mirror || !(mirror instanceof HTMLElement)) {
     hideTooltip();
     return;
   }
 
-  const ownerElement = mirrorOwners.get(mirror);
-  if (!ownerElement) {
+  const owner = mirrorOwners.get(mirror);
+  const wordIndex = Number.parseInt(hoveredError.dataset.wordIndex ?? '', 10);
+  const suggestion = hoveredError.dataset.suggestion ?? '';
+  if (!owner || !Number.isInteger(wordIndex) || !suggestion) {
     hideTooltip();
     return;
   }
 
-  const wordIndex = Number.parseInt(hoveredError.dataset.wordIndex ?? "", 10);
-  const suggestion = hoveredError.dataset.suggestion ?? "";
-  if (!Number.isInteger(wordIndex) || !suggestion) {
-    hideTooltip();
-    return;
-  }
+  activeSuggestion = { element: owner, wordIndex, suggestion };
+  tooltip.textContent = suggestion;
+  tooltip.style.display = 'block';
 
-  activeTooltipPayload = { element: ownerElement, wordIndex, suggestion };
-  tooltip.innerHTML = `Replace with: <strong>${escapeHtml(suggestion)}</strong>`;
-  tooltip.style.display = "block";
-
-  const rect = hoveredError.getBoundingClientRect();
+  const hoverRect = hoveredError.getBoundingClientRect();
   const tooltipRect = tooltip.getBoundingClientRect();
-  const aboveTop = rect.top - tooltipRect.height - 8;
-  const top = aboveTop > 8 ? aboveTop : rect.bottom + 8;
-  const left = Math.max(8, Math.min(rect.left, window.innerWidth - tooltipRect.width - 8));
-  tooltip.style.left = `${left}px`;
-  tooltip.style.top = `${top}px`;
+  const top = hoverRect.top - tooltipRect.height - 8 > 8 ? hoverRect.top - tooltipRect.height - 8 : hoverRect.bottom + 8;
+  const left = Math.max(8, Math.min(hoverRect.left, window.innerWidth - tooltipRect.width - 8));
+  tooltip.style.top = `${top + window.scrollY}px`;
+  tooltip.style.left = `${left + window.scrollX}px`;
 });
 
-tooltip.addEventListener("click", () => {
-  if (!activeTooltipPayload) {
+tooltip.addEventListener('click', () => {
+  if (!activeSuggestion) {
     return;
   }
-  replaceWordAtIndex(
-    activeTooltipPayload.element,
-    activeTooltipPayload.wordIndex,
-    activeTooltipPayload.suggestion
-  );
+
+  replaceWord(activeSuggestion.element, activeSuggestion.wordIndex, activeSuggestion.suggestion);
 });

@@ -1,63 +1,42 @@
-import { pipeline, env } from "@huggingface/transformers";
+import { pipeline, env } from '@huggingface/transformers';
 
 env.allowLocalModels = false;
 
-const MODEL_ID = "Xenova/grammar-synthesis-small";
-const BACKEND = "wasm";
-
-class GrammarPipelineSingleton {
-  static instancePromise = null;
-
-  static async createPipeline() {
-    return pipeline("text2text-generation", MODEL_ID, {
-      dtype: "q8"
-    });
-  }
+class GrammarPipeline {
+  static task = 'text2text-generation';
+  static model = 'Xenova/grammar-synthesis-small';
+  static instance = null;
 
   static async getInstance() {
-    if (!GrammarPipelineSingleton.instancePromise) {
-      GrammarPipelineSingleton.instancePromise = GrammarPipelineSingleton.createPipeline();
+    if (this.instance === null) {
+      this.instance = pipeline(this.task, this.model, { dtype: 'q8' });
     }
-
-    return GrammarPipelineSingleton.instancePromise;
+    return this.instance;
   }
 }
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  const handleMessage = async () => {
-    try {
-      if (!message || message.type !== "FIX_GRAMMAR" || typeof message.text !== "string") {
-        throw new Error("Invalid request payload.");
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'correct') {
+    (async () => {
+      try {
+        const corrector = await GrammarPipeline.getInstance();
+        const prompt = `grammar: ${request.text}`;
+        const result = await corrector(prompt, {
+          max_new_tokens: 128,
+          temperature: 0.1,
+          do_sample: false
+        });
+
+        let cleanText = result[0].generated_text;
+        if (cleanText.toLowerCase().startsWith('grammar:')) {
+          cleanText = cleanText.substring(8).trim();
+        }
+
+        sendResponse({ success: true, text: cleanText });
+      } catch (error) {
+        sendResponse({ success: false, error: error.message });
       }
-      const sourceText = message.text.trim();
-      const wordCount = sourceText.split(/\s+/).filter(Boolean).length;
-      const sourceCharCount = sourceText.length;
-
-      const grammar = await GrammarPipelineSingleton.getInstance();
-      const output = await grammar(`grammar: ${sourceText}`, {
-        do_sample: false,
-        max_new_tokens: Math.max(32, Math.min(128, wordCount * 5)),
-        no_repeat_ngram_size: 3
-      });
-      const generatedText =
-        Array.isArray(output) && output[0] && typeof output[0].generated_text === "string"
-          ? output[0].generated_text
-          : "";
-      const corrected = generatedText.replace(/^grammar:\s*/i, "").trim();
-      const correctedWordCount = corrected.split(/\s+/).filter(Boolean).length;
-      const isShortInputExplosion =
-        wordCount <= 2 &&
-        correctedWordCount >= 5 &&
-        corrected.length > Math.max(sourceCharCount * 2, sourceCharCount + 12);
-      const finalText = corrected && !isShortInputExplosion ? corrected : sourceText;
-
-      sendResponse({ ok: true, text: finalText, backend: BACKEND });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown processing error.";
-      sendResponse({ ok: false, error: errorMessage });
-    }
-  };
-
-  handleMessage();
-  return true;
+    })();
+    return true;
+  }
 });
