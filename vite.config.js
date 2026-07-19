@@ -8,7 +8,9 @@ function copyExtensionAssets() {
   const assetsToCopy = [
     { from: "manifest.json", to: "manifest.json" },
     { from: "src/popup.html", to: "popup.html" },
-    { from: "src/popup.js", to: "popup.js" }
+    { from: "src/popup.js", to: "popup.js" },
+    { from: "src/content.js", to: "src/content.js" },
+    { from: "src/content.css", to: "src/content.css" }
   ];
 
   return {

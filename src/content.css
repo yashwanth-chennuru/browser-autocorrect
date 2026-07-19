@@ -1,0 +1,47 @@
+.grammar-ai-target {
+  background-color: transparent !important;
+}
+
+.grammar-ai-mirror {
+  position: fixed;
+  margin: 0;
+  border: 0;
+  box-sizing: border-box;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 2147483000;
+}
+
+.grammar-ai-mirror-content {
+  min-height: 100%;
+  color: transparent;
+}
+
+.grammar-error {
+  text-decoration: underline wavy #d93025;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1.5px;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.grammar-ai-tooltip {
+  position: fixed;
+  display: none;
+  max-width: 280px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+  color: #1f1f1f;
+  font: 13px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  z-index: 2147483647;
+}
+
+.grammar-ai-tooltip strong {
+  color: #1255cc;
+  font-weight: 600;
+}

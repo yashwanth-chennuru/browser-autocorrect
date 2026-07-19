@@ -3,7 +3,16 @@
   "name": "Local Grammar Corrector",
   "description": "Private, local-first grammar correction using on-device Transformers.js with WebGPU.",
   "version": "1.0.0",
-  "permissions": ["storage"],
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content.js"],
+      "css": ["src/content.css"],
+      "run_at": "document_idle"
+    }
+  ],
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
   },
